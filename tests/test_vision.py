@@ -1,5 +1,6 @@
 import asyncio
 import json
+import urllib.error
 
 import pytest
 
@@ -161,3 +162,47 @@ def test_cli_default_stdio():
     args = server._parse_args([])
     assert args.transport == "stdio"
     assert args.path == "/mcp"
+
+
+def test_detect_platform_shape():
+    p = server._detect_platform()
+    assert set(p) == {"os", "arch", "wsl"}
+    assert p["os"] in {"linux", "darwin", "windows"}
+    assert isinstance(p["wsl"], bool)
+
+
+def test_check_llama_server_ok(monkeypatch):
+    class FakeResp:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b'{"status":"ok"}'
+
+    def fake_urlopen(req, timeout=5):
+        return FakeResp()
+
+    monkeypatch.setattr(server.urllib.request, "urlopen", fake_urlopen)
+    r = server._check_llama_server("http://127.0.0.1:9931")
+    assert r["reachable"] is True
+    assert r["status"] == 200
+
+
+def test_check_llama_server_unreachable(monkeypatch):
+    def boom(req, timeout=5):
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(server.urllib.request, "urlopen", boom)
+    r = server._check_llama_server("http://127.0.0.1:9999")
+    assert r["reachable"] is False
+    assert "error" in r
+
+
+def test_cli_parses_health():
+    args = server._parse_args(["--health"])
+    assert args.health is True

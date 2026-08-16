@@ -59,6 +59,41 @@ def _is_wsl():
         return False
 
 
+def _detect_platform():
+    return {
+        "os": platform.system().lower(),
+        "arch": platform.machine().lower(),
+        "wsl": _is_wsl(),
+    }
+
+
+def _check_llama_server(url, timeout=5):
+    url = url.rstrip("/")
+    health_url = f"{url}/health"
+    try:
+        with urllib.request.urlopen(health_url, timeout=timeout) as resp:
+            return {
+                "reachable": True,
+                "status": resp.status,
+                "health_url": health_url,
+                "body": resp.read().decode()[:200],
+            }
+    except urllib.error.HTTPError as e:
+        return {
+            "reachable": False,
+            "status": e.code,
+            "health_url": health_url,
+            "error": str(e),
+        }
+    except Exception as e:
+        return {
+            "reachable": False,
+            "status": None,
+            "health_url": health_url,
+            "error": str(e),
+        }
+
+
 def _detect_gateway_ip():
     if not _is_wsl():
         return "127.0.0.1"
@@ -449,6 +484,11 @@ def _parse_args(argv=None):
     parser.add_argument(
         "--once", action="store_true", help="read one request from stdin and exit"
     )
+    parser.add_argument(
+        "--health",
+        action="store_true",
+        help="print platform, resolved LLAMA_SERVER_URL, and llama-server health; exit 0 if reachable",
+    )
     return parser.parse_args(argv)
 
 
@@ -468,6 +508,21 @@ async def main():
         params = json.loads(line)
         res = await _inspect(params["image_path"], params["task"])
         print(json.dumps(json.loads(res.content[0].text)))
+        return
+
+    if args.health:
+        check = _check_llama_server(_SERVER_URL)
+        print(
+            json.dumps(
+                {
+                    "platform": _detect_platform(),
+                    "llama_server_url": _SERVER_URL,
+                    "health": check,
+                },
+                indent=2,
+            )
+        )
+        sys.exit(0 if check["reachable"] else 1)
         return
 
     server = _build_server()
