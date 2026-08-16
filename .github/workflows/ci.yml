@@ -14,6 +14,6 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
       - name: Install project + dev deps
-        run: uv sync --python 3.12 --group dev
+        run: uv sync --python 3.12 --group dev --extra http
       - name: Run tests
         run: uv run pytest

@@ -314,13 +314,22 @@ dependencies = [
     { name = "mcp" },
 ]
 
+[package.optional-dependencies]
+http = [
+    { name = "uvicorn" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "mcp", specifier = "==2.0.0" }]
+requires-dist = [
+    { name = "mcp", specifier = "==2.0.0" },
+    { name = "uvicorn", marker = "extra == 'http'", specifier = ">=0.30" },
+]
+provides-extras = ["http"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8.0" }]

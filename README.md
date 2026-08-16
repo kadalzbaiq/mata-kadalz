@@ -75,13 +75,20 @@ opencode stdio:
 
 ## Usage
 
-One tool: **`vision.inspect`** — takes `image_path` (absolute path on this machine) and `task` (what to analyze). Returns structured JSON:
+One tool: **`vision.inspect`** — takes `image_path` (absolute path on the machine where the MCP server runs) and `task` (what to analyze). Returns structured JSON:
 
 ```json
 { "success": true, "summary": "...", "details": "", "warnings": [], "cache_hit": true }
 ```
 
-On failure it returns `is_error: true` with a machine-readable code, e.g. `IMAGE_NOT_FOUND`, `IMAGE_NOT_SUPPORTED`, `LLAMA_SERVER_TIMEOUT`, `INVALID_VISION_RESPONSE`.
+On failure it returns `is_error: true` with a machine-readable code, e.g. `IMAGE_NOT_FOUND`, `IMAGE_NOT_SUPPORTED`, `IMAGE_PATH_NOT_ALLOWED`, `LLAMA_SERVER_URL_NOT_SET`, `LLAMA_SERVER_TIMEOUT`, `LLAMA_BUSY`, `INVALID_VISION_RESPONSE`.
+
+The server also embeds a **system prompt** (`SYSTEM_PROMPT`) instructing the vision model how to structure its output; the prompt is sent on every inference request.
+
+### HTTP vs stdio — where files must live
+
+- **stdio (local):** the MCP client and the server share one machine, so `image_path` is a path on that machine.
+- **streamable HTTP (remote):** the client and the server may be on different machines — `image_path` is resolved **on the server machine**, not the client's. Set `VISION_IMAGE_ROOTS` to restrict which directories the server will read from (strongly recommended for a network-exposed server).
 
 ## Configuration
 
@@ -89,18 +96,26 @@ Config precedence: `DEFAULTS` < `config/config.json` (empty values skipped) < en
 
 | Key | Default | Notes |
 |---|---|---|
-| `LLAMA_SERVER_URL` | `http://<gateway-ip>:9931` | Auto-detects WSL gateway IP; set explicitly to override |
+| `LLAMA_SERVER_URL` | `http://<gateway-ip>:9931` | Auto-detects WSL gateway IP; set explicitly to override. If WSL gateway detection fails and no URL is set, inference returns `LLAMA_SERVER_URL_NOT_SET` |
 | `VISION_RUNTIME_DIR` | `<repo>/runtime/vision` | Relative paths resolve against repo root |
 | `VISION_CACHE_DIR` | `<repo>/runtime/vision/cache` | |
 | `VISION_LOG_DIR` | `<repo>/runtime/vision/logs` | |
 | `VISION_TIMEOUT_SECONDS` | `180` | CPU inference takes 10–130 s per call |
 | `VISION_MAX_IMAGE_SIZE` | `20971520` | 20 MB |
 | `VISION_MODEL_ID` | `qwen3-vl` | |
+| `VISION_IMAGE_ROOTS` | *(empty = any path)* | Restrict readable image dirs. JSON array or comma-separated, relative to repo root. Symlinks and `..` escapes resolve and are rejected |
+| `VISION_MAX_QUEUE` | `4` | Bounded inference queue; beyond this, calls fail fast with `LLAMA_BUSY` |
 
 Example override in `config/config.json`:
 
 ```json
 { "LLAMA_SERVER_URL": "http://192.168.64.1:9931" }
+```
+
+Restrict a network-exposed server to one directory:
+
+```json
+{ "VISION_IMAGE_ROOTS": ["/srv/shared-images"] }
 ```
 
 ## Health check
@@ -115,7 +130,11 @@ Prints platform, resolved `LLAMA_SERVER_URL`, and a `reachable: true/false` heal
 
 ## Caching
 
-Requests are deduplicated by `sha256(image) + task + model`. A cache hit returns instantly without touching llama-server. Failed requests are never cached. Inference is serialized with a process-wide lock (one concurrent call at a time).
+Requests are deduplicated by `sha256(image) + task + model`. A cache hit returns instantly without touching llama-server. Failed requests are never cached. Inference is serialized with a process-wide lock (one concurrent call at a time); the queue beyond the lock is bounded by `VISION_MAX_QUEUE` and returns `LLAMA_BUSY` when full.
+
+**Cache invalidation:** changing `VISION_MODEL_ID` invalidates the cache automatically, because the model id is part of the cache key — stale answers from an older model are never served.
+
+**Cancellation:** if the MCP client cancels a request mid-inference, the server releases its lock and queue slot immediately, discards the in-flight result (never caches a partial one), and the error propagates without crashing the server. The underlying llama-server call keeps running in the background; its result is ignored.
 
 ## Self-check
 
@@ -123,13 +142,23 @@ Requests are deduplicated by `sha256(image) + task + model`. A cache hit returns
 echo '{"image_path":"/path/to/img.png","task":"describe"}' | .venv/bin/mata-kadalz --once
 ```
 
+Reads one JSON request from stdin, runs it, prints the result, and exits: **0** on success or cache hit, **1** on any error (invalid input, missing file, unreachable llama-server, ...). Useful for scripting and cron-style smoke checks.
+
 ## Test
 
 ```bash
 .venv/bin/python -m pytest
 ```
 
-No llama-server required — tests cover config, file validation, magic bytes, cache logic, and error codes.
+No llama-server required — tests cover config, file validation, magic bytes, cache logic, image-root policy, cancellation, `--once` exit codes, WSL gateway detection, bounded queue, and a real streamable-HTTP session over uvicorn.
+
+## HTTP transport dependency
+
+`uvicorn` is only needed for `--transport http`. It already ships transitively with the MCP SDK, but it is also declared as an explicit optional extra so the intent is unambiguous:
+
+```bash
+pip install 'mata-kadalz[http]'
+```
 
 ## License
 

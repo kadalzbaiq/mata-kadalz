@@ -12,6 +12,11 @@ dependencies = [
     "mcp==2.0.0",
 ]
 
+[project.optional-dependencies]
+http = [
+    "uvicorn>=0.30",
+]
+
 [project.scripts]
 mata-kadalz = "server:cli"
 

@@ -12,9 +12,21 @@ _Avoid_: vision-mcp, lizard-eyes, the server binary
 
 ## vision.inspect
 
-The single MCP tool. Takes `image_path` (absolute local path) and `task` (what to analyze), returns structured text JSON. Never returns image bytes.
+The single MCP tool. Takes `image_path` (absolute path on the machine where the MCP server runs — the client's machine for stdio, the server's machine for HTTP) and `task` (what to analyze), returns structured text JSON. Never returns image bytes.
 
 _Avoid_: vision.ocr, vision.compare, vision.describe_image
+
+## Image roots
+
+`VISION_IMAGE_ROOTS` restricts which directories `vision.inspect` may read from. Empty (default) = any path; when set, symlink and `..` escapes resolve and are rejected with `IMAGE_PATH_NOT_ALLOWED`. Required hardening for a network-exposed HTTP server.
+
+_Avoid_: allowed dirs, whitelist
+
+## Inference queue
+
+A bounded queue (`VISION_MAX_QUEUE`, default 4) in front of the serialized inference lock. Calls beyond the bound fail fast with `LLAMA_BUSY` instead of piling up. Cancelled requests release the lock and queue slot immediately.
+
+_Avoid_: semaphore, rate limit
 
 ## llama-server
 

@@ -22,8 +22,10 @@ in `SETUP-windows.md` (sections A.1–A.5). Start `llama-server.exe` bound to
 2. Install the MCP server: `./scripts/install.sh` (creates `.venv`, installs the `mata-kadalz` package only).
 3. Point it at llama-server: `mata-kadalz` auto-detects the WSL gateway IP
    (the Windows host) and defaults to `http://<gateway-ip>:9931`, so no
-   override is usually needed. If detection is wrong, set `LLAMA_SERVER_URL`
-   explicitly in `config/config.json` or env.
+   override is usually needed. If detection is wrong **or fails** (gateway
+   detection needs `ip route` to report a default route), set `LLAMA_SERVER_URL`
+   explicitly in `config/config.json` or env — without it, calls return
+   `LLAMA_SERVER_URL_NOT_SET` and `--health` shows the missing URL.
 4. Confirm connectivity: `.venv/bin/mata-kadalz --health` → `"reachable": true`.
 5. Register in your client (stdio or http) — see README "Client registration".
 6. Self-check: `echo '{"image_path":"/abs/path/img.png","task":"describe"}' | .venv/bin/mata-kadalz --once`

@@ -106,17 +106,23 @@ def _detect_gateway_ip():
                 return line.split()[2]
     except Exception:
         pass
-    return "127.0.0.1"
+    return None
 
 
+_gateway_ip = _detect_gateway_ip()
 DEFAULTS = {
-    "LLAMA_SERVER_URL": f"http://{_detect_gateway_ip()}:9931",
+    # empty URL when WSL gateway is undetectable: caller must set LLAMA_SERVER_URL explicitly
+    "LLAMA_SERVER_URL": f"http://{_gateway_ip}:9931" if _gateway_ip else "",
     "VISION_RUNTIME_DIR": str(BASE_DIR / "runtime" / "vision"),
     "VISION_CACHE_DIR": str(BASE_DIR / "runtime" / "vision" / "cache"),
     "VISION_LOG_DIR": str(BASE_DIR / "runtime" / "vision" / "logs"),
     "VISION_TIMEOUT_SECONDS": "180",
     "VISION_MAX_IMAGE_SIZE": "20971520",
     "VISION_MODEL_ID": "qwen3-vl",
+    # comma-separated allowed roots for image_path; empty = unrestricted (local use)
+    "VISION_IMAGE_ROOTS": "",
+    # max requests waiting on the inference lock; beyond this a request gets LLAMA_BUSY
+    "VISION_MAX_QUEUE": "4",
 }
 CONFIG_FILE = BASE_DIR / "config" / "config.json"
 
@@ -153,6 +159,47 @@ _MAX_IMAGE = int(CONFIG["VISION_MAX_IMAGE_SIZE"])
 _SERVER_URL = CONFIG["LLAMA_SERVER_URL"].rstrip("/")
 _MODEL_ID = CONFIG["VISION_MODEL_ID"]
 _LOCK = asyncio.Lock()
+_MAX_QUEUE = int(CONFIG["VISION_MAX_QUEUE"])
+# count of requests queued/active on the inference lock; guarded by single-threaded
+# event loop (no await between check and increment), so no race within one loop
+_QUEUE_COUNT = 0
+
+
+def _parse_image_roots(raw):
+    if not raw:
+        return []
+    try:
+        items = json.loads(raw)
+        if isinstance(items, str):
+            items = [items]
+    except Exception:
+        items = [x.strip() for x in raw.split(",") if x.strip()]
+    roots = []
+    for item in items:
+        p = Path(item).expanduser()
+        roots.append(p if p.is_absolute() else _abs(p))
+    return roots
+
+
+_IMAGE_ROOTS = _parse_image_roots(CONFIG["VISION_IMAGE_ROOTS"])
+
+
+def _resolve_image_path(image_path):
+    p = Path(image_path).expanduser()
+    if not p.is_absolute():
+        p = _abs(p)
+    try:
+        resolved = p.resolve()
+    except Exception as e:
+        return None, error_result(
+            "IMAGE_PATH_NOT_ALLOWED", f"cannot resolve image path: {e}"
+        )
+    if _IMAGE_ROOTS and not any(resolved.is_relative_to(r) for r in _IMAGE_ROOTS):
+        return None, error_result(
+            "IMAGE_PATH_NOT_ALLOWED",
+            f"image path outside allowed roots: {resolved}",
+        )
+    return resolved, None
 
 
 def setup_logging():
@@ -227,10 +274,11 @@ def _write_cache(cache_file, payload):
         return False
 
 
-def _call_llama(image_data, mime, task):
-    body = {
+def _build_chat_body(image_data, mime, task):
+    return {
         "model": _MODEL_ID,
         "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": [
@@ -245,12 +293,22 @@ def _call_llama(image_data, mime, task):
                     },
                     {"type": "text", "text": task},
                 ],
-            }
+            },
         ],
         "max_tokens": 512,
         "temperature": 0.2,
         "stream": False,
     }
+
+
+def _call_llama(image_data, mime, task):
+    if not _SERVER_URL:
+        return None, error_result(
+            "LLAMA_SERVER_URL_NOT_SET",
+            "LLAMA_SERVER_URL is not configured (WSL gateway not detected); "
+            "set it explicitly, e.g. LLAMA_SERVER_URL=http://127.0.0.1:9931",
+        )
+    body = _build_chat_body(image_data, mime, task)
     req = urllib.request.Request(
         f"{_SERVER_URL}/v1/chat/completions",
         data=json.dumps(body).encode(),
@@ -294,16 +352,19 @@ def _call_llama(image_data, mime, task):
 
 
 async def _inspect(image_path, task) -> CallToolResult:
-    image_path = Path(image_path).expanduser()
-    if not image_path.is_file():
-        return error_result("IMAGE_NOT_FOUND", f"image not found: {image_path}")
-    if image_path.suffix.lower() not in SUPPORTED_EXT:
+    resolved, path_err = _resolve_image_path(image_path)
+    if path_err is not None:
+        return path_err
+    assert resolved is not None
+    if not resolved.is_file():
+        return error_result("IMAGE_NOT_FOUND", f"image not found: {resolved}")
+    if resolved.suffix.lower() not in SUPPORTED_EXT:
         return error_result(
             "IMAGE_NOT_SUPPORTED",
-            f"unsupported image type '{image_path.suffix}'; supported: {', '.join(sorted(SUPPORTED_EXT))}",
+            f"unsupported image type '{resolved.suffix}'; supported: {', '.join(sorted(SUPPORTED_EXT))}",
         )
 
-    image_data, err = _read_image(image_path)
+    image_data, err = _read_image(resolved)
     if err is not None or image_data is None:
         return (
             err
@@ -313,19 +374,17 @@ async def _inspect(image_path, task) -> CallToolResult:
 
     if not any(image_data.startswith(m) for m in MAGIC):
         return error_result(
-            "IMAGE_NOT_SUPPORTED", f"file is not a supported image: {image_path}"
+            "IMAGE_NOT_SUPPORTED", f"file is not a supported image: {resolved}"
         )
 
-    mime, _ = mimetypes.guess_type(image_path.name)
+    mime, _ = mimetypes.guess_type(resolved.name)
     if not mime or not mime.startswith("image/"):
         mime = "image/png"
 
     image_hash = _sha256(image_data)
     req_id = hashlib.sha256(os.urandom(16)).hexdigest()[:8]
     cache_file = _cache_path(image_hash, task, _MODEL_ID)
-    log.info(
-        "request=%s image=%s hash=%s task=%r", req_id, image_path, image_hash, task
-    )
+    log.info("request=%s image=%s hash=%s task=%r", req_id, resolved, image_hash, task)
 
     cached = _read_cache(cache_file)
     if cached is not None and cached.get("success"):
@@ -337,49 +396,66 @@ async def _inspect(image_path, task) -> CallToolResult:
             ]
         )
 
-    async with _LOCK:
-        cached = _read_cache(cache_file)
-        if cached is not None and cached.get("success"):
-            log.info("request=%s cache hit (post-lock)", req_id)
-            cached["cache_hit"] = True
-            return CallToolResult(
-                content=[
-                    TextContent(
-                        type="text", text=json.dumps(cached, ensure_ascii=False)
-                    )
-                ]
-            )
-
-        start = time.time()
-        resp, err = await asyncio.to_thread(_call_llama, image_data, mime, task)
-        dur = round(time.time() - start, 2)
-        if err or resp is None:
-            if err is None:
-                err = error_result(
-                    "LLAMA_SERVER_ERROR", "llama-server returned no data"
-                )
-            log.info(
-                "request=%s llama error after %ss: %s", req_id, dur, err.content[0].text
-            )
-            return err
-
-        content = resp["choices"][0]["message"]["content"].strip()
-        result = {
-            "success": True,
-            "summary": content,
-            "details": "",
-            "warnings": [],
-            "cache_hit": False,
-        }
-        usage = resp.get("usage", {})
-        log.info(
-            "request=%s llama ok in %ss tokens=%s",
-            req_id,
-            dur,
-            usage.get("total_tokens"),
+    global _QUEUE_COUNT
+    if _QUEUE_COUNT >= _MAX_QUEUE:
+        return error_result(
+            "LLAMA_BUSY",
+            f"inference queue full ({_MAX_QUEUE} waiting); try again later",
         )
-        if not _write_cache(cache_file, result):
-            log.warning("request=%s cache write failed", req_id)
+    _QUEUE_COUNT += 1
+    try:
+        async with _LOCK:
+            cached = _read_cache(cache_file)
+            if cached is not None and cached.get("success"):
+                log.info("request=%s cache hit (post-lock)", req_id)
+                cached["cache_hit"] = True
+                return CallToolResult(
+                    content=[
+                        TextContent(
+                            type="text", text=json.dumps(cached, ensure_ascii=False)
+                        )
+                    ]
+                )
+
+            start = time.time()
+            try:
+                resp, err = await asyncio.to_thread(_call_llama, image_data, mime, task)
+            except asyncio.CancelledError:
+                log.warning("request=%s cancelled during llama call", req_id)
+                raise
+            dur = round(time.time() - start, 2)
+            if err or resp is None:
+                if err is None:
+                    err = error_result(
+                        "LLAMA_SERVER_ERROR", "llama-server returned no data"
+                    )
+                log.info(
+                    "request=%s llama error after %ss: %s",
+                    req_id,
+                    dur,
+                    err.content[0].text,
+                )
+                return err
+
+            content = resp["choices"][0]["message"]["content"].strip()
+            result = {
+                "success": True,
+                "summary": content,
+                "details": "",
+                "warnings": [],
+                "cache_hit": False,
+            }
+            usage = resp.get("usage", {})
+            log.info(
+                "request=%s llama ok in %ss tokens=%s",
+                req_id,
+                dur,
+                usage.get("total_tokens"),
+            )
+            if not _write_cache(cache_file, result):
+                log.warning("request=%s cache write failed", req_id)
+    finally:
+        _QUEUE_COUNT -= 1
     return CallToolResult(
         content=[TextContent(type="text", text=json.dumps(result, ensure_ascii=False))]
     )
@@ -505,13 +581,40 @@ async def main():
 
     if args.once:
         line = sys.stdin.buffer.readline()
-        params = json.loads(line)
-        res = await _inspect(params["image_path"], params["task"])
-        print(json.dumps(json.loads(res.content[0].text)))
-        return
+        try:
+            params = json.loads(line)
+            image_path = params["image_path"]
+            task = params["task"]
+        except Exception as e:
+            print(
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": {
+                            "code": "INVALID_ARGUMENTS",
+                            "message": f"malformed request: {e}",
+                        },
+                        "cache_hit": False,
+                    }
+                )
+            )
+            sys.exit(1)
+        res = await _inspect(image_path, task)
+        body = json.loads(res.content[0].text)
+        print(json.dumps(body))
+        sys.exit(0 if body.get("success") else 1)
 
     if args.health:
-        check = _check_llama_server(_SERVER_URL)
+        if not _SERVER_URL:
+            check = {
+                "reachable": False,
+                "status": None,
+                "health_url": None,
+                "error": "LLAMA_SERVER_URL not configured (WSL gateway not detected); "
+                "set LLAMA_SERVER_URL explicitly",
+            }
+        else:
+            check = _check_llama_server(_SERVER_URL)
         print(
             json.dumps(
                 {
@@ -528,7 +631,14 @@ async def main():
     server = _build_server()
 
     if args.transport == "http":
-        import uvicorn
+        try:
+            import uvicorn
+        except ImportError:
+            print(
+                "uvicorn is not installed; install it with: pip install 'mata-kadalz[http]'",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
         app = server.streamable_http_app(streamable_http_path=args.path)
         config = uvicorn.Config(app, host=args.host, port=args.port, log_level="info")

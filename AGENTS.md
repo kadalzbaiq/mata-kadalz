@@ -15,6 +15,11 @@ Linux, macOS, or in WSL) that runs **Qwen3-VL-4B**.
 - **One tool only:** `vision.inspect(image_path, task)`.
 - **Cache contract:** key = sha256(image_sha256 + task + model_id); failed
   requests never cached; inference serialized via `asyncio.Lock`.
+- **Backpressure:** queue bounded by `VISION_MAX_QUEUE` (default 4); full queue
+  returns `LLAMA_BUSY` immediately.
+- **File access:** `image_path` resolves against the server machine; if
+  `VISION_IMAGE_ROOTS` is set, only paths inside a root (after `resolve()`) are
+  allowed, else `IMAGE_PATH_NOT_ALLOWED`. Default (empty) = any path.
 - **Never return image bytes** — text JSON only.
 - **Dependency boundary:** `mata-kadalz` is the MCP layer only. Never vendor,
   bundle, download, or manage llama.cpp/model files in this repo. The docs
