@@ -12,15 +12,33 @@ client -> vision.inspect -> mata-kadalz server.py (stdio or streamable HTTP)
 `mata-kadalz` is a thin MCP layer. The inference runtime (`llama-server` from llama.cpp) and the
 model are **external dependencies you install yourself**; this repo never downloads or bundles them.
 
+## Quick start
+
+> **Install from source.** This project is not yet published to PyPI, so the package is
+> installed from this repository (see [Setup guides](#supported-setups) for your platform).
+
+1. Install Python **>= 3.11**.
+2. Install **llama-server** (llama.cpp) and the **Qwen3-VL-4B** model + mmproj — external,
+   from official sources (links in the [Model](#model) and [Setup guides](#supported-setups) sections).
+3. Start `llama-server` and confirm it is healthy: `curl http://localhost:9931/health` → `{"status":"ok"}`.
+4. Install `mata-kadalz` from this repo into a venv:
+   ```bash
+   git clone https://github.com/kadalzbaiq/mata-kadalz.git
+   cd mata-kadalz
+   bash scripts/install.sh          # POSIX (Linux/macOS/WSL); Windows: see docs/SETUP-windows.md
+   ```
+5. Confirm the MCP server can reach llama-server: `.venv/bin/mata-kadalz --health`.
+6. Register `mata-kadalz` in your MCP client — see [Client registration](#client-registration).
+
 ## Supported setups
 
 | Host | llama-server runs on | Setup doc |
 |---|---|---|
-| Windows only | Windows (native) | `docs/SETUP-windows.md` |
-| Linux only | Linux (native) | `docs/SETUP-linux.md` |
-| macOS only | macOS (native) | `docs/SETUP-macos.md` |
-| WSL2 on Windows | Windows host (native) | `docs/SETUP-hybrid-wsl.md` |
-| Any / remote / custom | anywhere reachable over HTTP | `docs/SETUP-modular.md` |
+| Windows (native) | Windows | [docs/SETUP-windows.md](docs/SETUP-windows.md) |
+| Linux (native) | Linux | [docs/SETUP-linux.md](docs/SETUP-linux.md) |
+| macOS (native) | macOS | [docs/SETUP-macos.md](docs/SETUP-macos.md) |
+| WSL2 on Windows | Windows host (native) | [docs/SETUP-hybrid-wsl.md](docs/SETUP-hybrid-wsl.md) |
+| Any / remote / custom | anywhere reachable over HTTP | [docs/SETUP-modular.md](docs/SETUP-modular.md) |
 
 ## Model
 
@@ -45,32 +63,38 @@ runtime/                  # logs + image cache (gitignored)
 
 ## Client registration
 
-stdio (local):
+Replace `/path/to/mata-kadalz/.venv/bin/mata-kadalz` with the real path on your machine.
+
+stdio (local — same machine as the images):
 
 ```bash
-# opencode: config/open code entry
 # claude
-claude mcp add vision -- /path/to/.venv/bin/mata-kadalz
+claude mcp add vision -- /path/to/mata-kadalz/.venv/bin/mata-kadalz
 # codex
-codex mcp add vision -- /path/to/.venv/bin/mata-kadalz
+codex mcp add vision -- /path/to/mata-kadalz/.venv/bin/mata-kadalz
 ```
 
-streamable HTTP (remote):
+streamable HTTP (remote — server machine may differ from client):
 
 ```bash
 # claude
 claude mcp add --transport http vision http://127.0.0.1:9932/mcp
 # codex
 codex mcp add vision --url http://127.0.0.1:9932/mcp
-# opencode (opencode.json)
-{ "mcp": { "vision": { "type": "remote", "url": "http://127.0.0.1:9932/mcp" } } }
 ```
 
-opencode stdio:
+opencode (config in `opencode.json`):
 
 ```jsonc
-{ "mcp": { "vision": { "type": "local",
-  "command": ["/abs/path/mata-kadalz/.venv/bin/mata-kadalz"] } } }
+{
+  "mcp": {
+    "vision": {
+      "type": "local",                 // stdio
+      "command": ["/path/to/mata-kadalz/.venv/bin/mata-kadalz"]
+    }
+    // or "type": "remote", "url": "http://127.0.0.1:9932/mcp"  // streamable HTTP
+  }
+}
 ```
 
 ## Usage
@@ -89,6 +113,15 @@ The server also embeds a **system prompt** (`SYSTEM_PROMPT`) instructing the vis
 
 - **stdio (local):** the MCP client and the server share one machine, so `image_path` is a path on that machine.
 - **streamable HTTP (remote):** the client and the server may be on different machines — `image_path` is resolved **on the server machine**, not the client's. Set `VISION_IMAGE_ROOTS` to restrict which directories the server will read from (strongly recommended for a network-exposed server).
+
+### Security for HTTP deployments
+
+If you expose the server over the network:
+
+- **Set `VISION_IMAGE_ROOTS`** so the server can only read from the directories you choose. With it unset, the server can read any path on the host.
+- **Bind to a safe interface.** `--host 127.0.0.1` (the default) only accepts local connections. For LAN/remote access, prefer a VPN or a firewall rule over binding `0.0.0.0` on a public interface.
+- **No authentication is built in.** Put the endpoint behind an authenticated reverse proxy or your VPN. The HTTP transport speaks raw MCP; there is no token/user layer.
+- Allow inbound traffic only on the ports you use: **9931** (llama-server) and **9932** (mata-kadalz HTTP transport).
 
 ## Configuration
 
@@ -157,8 +190,12 @@ No llama-server required — tests cover config, file validation, magic bytes, c
 `uvicorn` is only needed for `--transport http`. It already ships transitively with the MCP SDK, but it is also declared as an explicit optional extra so the intent is unambiguous:
 
 ```bash
-pip install 'mata-kadalz[http]'
+# from a source checkout (until PyPI publication)
+pip install -e '.[http]'          # or: bash scripts/install.sh then pip install -e '.[http]'
 ```
+
+> Until the package is published to PyPI, `pip install mata-kadalz` and
+> `pip install 'mata-kadalz[http]'` will **not** work. Use a source checkout.
 
 ## License
 

@@ -8,6 +8,9 @@ never downloads or bundles these.
 
 **B. mata-kadalz (MCP layer)** — the installable package from this repo.
 
+All `mata-kadalz` commands below are PowerShell. The MCP package is installed
+from a source checkout (this project is not yet published to PyPI).
+
 ## A. llama-server + model (external)
 
 1. Install **llama.cpp** following its official docs for Windows:
@@ -21,7 +24,7 @@ never downloads or bundles these.
 3. Download the **mmproj** (vision encoder):
    `mmproj-Qwen3VL-4B-Instruct-F16.gguf` —
    https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-4B-Instruct-F16.gguf
-   (Place both where your llama.cpp install expects them, e.g. `$env:LLAMA_DIR\models\qwen3-vl-4b`.)
+   (Place both where your llama.cpp install expects them, e.g. `D:\Software\llama\models\qwen3-vl-4b`.)
 4. Start `llama-server.exe` with your model + mmproj (PowerShell), e.g.:
 
    ```powershell
@@ -33,13 +36,43 @@ never downloads or bundles these.
 
 ## B. mata-kadalz (MCP layer)
 
-1. Install Python >=3.11 (https://www.python.org/downloads/windows/).
-2. Install the MCP server: `./scripts/install.sh` (Git Bash/WSL) or create a venv manually.
+1. Install **Python >= 3.11** from https://www.python.org/downloads/windows/.
+   During install, check **"Add python.exe to PATH"** (or use `py` below).
+2. Clone the repo and install into a venv (PowerShell):
+
+   ```powershell
+   git clone https://github.com/kadalzbaiq/mata-kadalz.git
+   cd mata-kadalz
+   py -3.11 -m venv .venv
+   .\.venv\Scripts\python -m pip install --upgrade pip
+   .\.venv\Scripts\python -m pip install -e .
+   ```
+
+   The repo includes `scripts/install.sh`, but that is a POSIX script; on
+   native Windows use the PowerShell commands above. The commands create a
+   `.venv` and install only the `mata-kadalz` package (nothing external).
+
 3. Point it at llama-server: the default `http://127.0.0.1:9931` works for the
    common case. Override in `config/config.json` or env `LLAMA_SERVER_URL`
    (see README "Configuration").
-4. Confirm connectivity: `.venv/bin/mata-kadalz --health` → `"reachable": true`.
-5. Register in your client (stdio or http) — see README "Client registration".
-6. Self-check: `echo '{"image_path":"/abs/path/img.png","task":"describe"}' | .venv/bin/mata-kadalz --once`
+4. Confirm connectivity (PowerShell):
 
-> Firewall note: if another machine must reach llama-server, allow inbound TCP 9931.
+   ```powershell
+   .\.venv\Scripts\mata-kadalz.exe --health
+   ```
+
+   → `"reachable": true`.
+5. Register in your client (stdio or http) — see README "Client registration".
+6. Self-check (PowerShell):
+
+   ```powershell
+   '{"image_path":"D:\path\to\img.png","task":"describe"}' | .\.venv\Scripts\mata-kadalz.exe --once
+   ```
+
+   Note: on Windows, `--once` reads from stdin and prints the JSON result;
+   exit code 0 = success/cache hit, 1 = error.
+
+> Firewall note: if another machine must reach llama-server, allow inbound
+> TCP 9931. If another machine must reach the MCP HTTP transport, allow
+> inbound TCP 9932 and set `VISION_IMAGE_ROOTS` (see README "Security for
+> HTTP deployments").
