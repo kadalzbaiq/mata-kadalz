@@ -132,3 +132,32 @@ def test_unknown_tool():
     res = asyncio.run(run())
     body = json.loads(res.content[0].text)
     assert body["error"]["code"] == "UNKNOWN_TOOL"
+
+
+def test_wsl_not_detected_native(monkeypatch):
+    monkeypatch.delenv("WSL_DISTRO_NAME", raising=False)
+    monkeypatch.setattr(server, "_is_wsl", lambda: False)
+    assert server._detect_gateway_ip() == "127.0.0.1"
+
+
+def test_wsl_detection_via_env(monkeypatch):
+    monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
+    assert server._is_wsl() is True
+
+
+def test_http_app_buildable():
+    srv = server._build_server()
+    app = srv.streamable_http_app(streamable_http_path="/mcp")
+    assert app is not None
+
+
+def test_cli_parses_transport():
+    args = server._parse_args(["--transport", "http", "--port", "9999"])
+    assert args.transport == "http"
+    assert args.port == 9999
+
+
+def test_cli_default_stdio():
+    args = server._parse_args([])
+    assert args.transport == "stdio"
+    assert args.path == "/mcp"

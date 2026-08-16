@@ -6,6 +6,7 @@ import json
 import logging
 import mimetypes
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -46,7 +47,21 @@ SYSTEM_PROMPT = (
 log = logging.getLogger("vision_mcp")
 
 
+def _is_wsl():
+    if os.environ.get("WSL_DISTRO_NAME"):
+        return True
+    if platform.system() != "Linux":
+        return False
+    try:
+        with open("/proc/version", encoding="utf-8") as f:
+            return "microsoft" in f.read().lower()
+    except Exception:
+        return False
+
+
 def _detect_gateway_ip():
+    if not _is_wsl():
+        return "127.0.0.1"
     try:
         out = subprocess.run(
             ["ip", "route"], capture_output=True, text=True, timeout=5
@@ -402,12 +417,47 @@ async def _on_call_tool(ctx, params: CallToolRequestParams):
     return await _inspect(image_path, task)
 
 
-async def main():
-    parser = argparse.ArgumentParser()
+def _build_server():
+    return Server(
+        "mata-kadalz",
+        version="1.0.0",
+        on_list_tools=_on_list_tools,
+        on_call_tool=_on_call_tool,
+    )
+
+
+def _parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="mata-kadalz",
+        description="Local vision MCP server (Qwen3-VL via llama-server). stdio or streamable HTTP.",
+    )
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "http"],
+        default="stdio",
+        help="MCP transport (default: stdio)",
+    )
+    parser.add_argument(
+        "--host", default="127.0.0.1", help="HTTP bind host (default: 127.0.0.1)"
+    )
+    parser.add_argument(
+        "--port", type=int, default=9932, help="HTTP bind port (default: 9932)"
+    )
+    parser.add_argument(
+        "--path", default="/mcp", help="streamable HTTP path (default: /mcp)"
+    )
     parser.add_argument(
         "--once", action="store_true", help="read one request from stdin and exit"
     )
-    args = parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def cli():
+    asyncio.run(main())
+
+
+async def main():
+    args = _parse_args()
 
     _RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
     _CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -420,12 +470,17 @@ async def main():
         print(json.dumps(json.loads(res.content[0].text)))
         return
 
-    server = Server(
-        "vision-mcp",
-        version="1.0.0",
-        on_list_tools=_on_list_tools,
-        on_call_tool=_on_call_tool,
-    )
+    server = _build_server()
+
+    if args.transport == "http":
+        import uvicorn
+
+        app = server.streamable_http_app(streamable_http_path=args.path)
+        config = uvicorn.Config(app, host=args.host, port=args.port, log_level="info")
+        uvicorn_server = uvicorn.Server(config)
+        log.info("serving streamable HTTP on %s:%s%s", args.host, args.port, args.path)
+        await uvicorn_server.serve()
+        return
 
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
@@ -434,4 +489,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    cli()
