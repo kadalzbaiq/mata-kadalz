@@ -35,7 +35,7 @@
 - Consumes: nothing (repo scaffold exists)
 - Produces: seed files present at repo root so later tasks edit them
 
-- [ ] **Step 1: Verify scaffold**
+- [x] **Step 1: Verify scaffold**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -46,7 +46,7 @@ gh label list -R kadalzbaiq/mata-kadalz     # expect bug/enhancement/good-first-
 
 Expected: main branch, active `protect-main` ruleset (status check context `ci`), labels present.
 
-- [ ] **Step 2: Copy seed files from private repo**
+- [x] **Step 2: Copy seed files from private repo**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -58,7 +58,7 @@ cp /home/kadalz/vision-mcp/tests/test_vision.py tests/test_vision.py 2>/dev/null
 
 Expected: files copied. (Contents will be rewritten/generalized in Tasks 1–4. **No scripts are seeded** — the llama.cpp/manage scripts from the private repo are distribution tooling and stay out of `mata-kadalz` per the dependency boundary.)
 
-- [ ] **Step 3: Create venv to run tests later**
+- [x] **Step 3: Create venv to run tests later**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -69,7 +69,7 @@ python3 -m venv .venv
 
 Expected: `.venv` with mcp 2.0.0 + pytest (copies current private-repo runtime so all tests run identically).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -92,7 +92,7 @@ git commit -m "chore: seed from private vision-mcp (server, tests, config)"
   - `_detect_gateway_ip()` — `127.0.0.1` unless WSL, then `ip route` gateway
   - HTTP branch: `server.streamable_http_app(streamable_http_path=args.path)` run via `uvicorn.run`
 
-- [ ] **Step 1: Write the failing tests for transport + host detection**
+- [x] **Step 1: Write the failing tests for transport + host detection**
 
 Append to `tests/test_vision.py`:
 
@@ -126,12 +126,12 @@ def test_cli_default_stdio():
     assert args.path == "/mcp"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv/bin/python -m pytest tests/test_vision.py -v`
 Expected: FAIL — `_is_wsl`, `_build_server`, `_parse_args` not defined; `_detect_gateway_ip` returns gateway instead of `127.0.0.1` on native.
 
-- [ ] **Step 3: Implement transport + host detection**
+- [x] **Step 3: Implement transport + host detection**
 
 In `server.py`:
 
@@ -165,7 +165,7 @@ def _detect_gateway_ip():
     return "127.0.0.1"
 ```
 
-- [ ] **Step 4: Refactor server construction + CLI args**
+- [x] **Step 4: Refactor server construction + CLI args**
 
 Replace the `main()` body so it splits into `_build_server()`, `_parse_args()`, `cli()`, `main()`:
 
@@ -233,19 +233,19 @@ async def main():
         )
 ```
 
-- [ ] **Step 5: Update `__main__` guard**
+- [x] **Step 5: Update `__main__` guard**
 
 ```python
 if __name__ == "__main__":
     cli()
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `.venv/bin/python -m pytest tests/test_vision.py -v`
 Expected: ALL PASS (11 original + 5 new).
 
-- [ ] **Step 7: Verify stdio handshake still works (no llama-server needed for handshake)**
+- [x] **Step 7: Verify stdio handshake still works (no llama-server needed for handshake)**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -254,7 +254,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol
 
 Expected: `initialize` result echoes back, process exits cleanly (no crash).
 
-- [ ] **Step 8: Verify HTTP transport boots**
+- [x] **Step 8: Verify HTTP transport boots**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -266,7 +266,7 @@ kill %1 2>/dev/null || true
 
 Expected: HTTP status 4xx/5xx on bare POST to `/mcp` (any non-5xx-connection error proves the ASGI app is up; exact body varies by MCP SDK).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -285,7 +285,7 @@ git commit -m "feat: dual transport (stdio+http) with CLI entry and WSL host det
 - Consumes: Task 1 `cli()`
 - Produces: installable package `mata-kadalz` with console script
 
-- [ ] **Step 1: Rewrite pyproject**
+- [x] **Step 1: Rewrite pyproject**
 
 ```toml
 [build-system]
@@ -319,7 +319,7 @@ pythonpath = ["."]
 addopts = "-ra"
 ```
 
-- [ ] **Step 2: Verify console script works**
+- [x] **Step 2: Verify console script works**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -329,7 +329,7 @@ cd /home/kadalz/dev/mata-kadalz
 
 Expected: `--help` shows the argparse help (prog `mata-kadalz`).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -355,7 +355,7 @@ git commit -m "feat: mata-kadalz package with console entry point"
 
 **Boundary note:** NO downloaders, NO llama.cpp installer, NO model fetcher. `install.sh` only creates a venv and installs the `mata-kadalz` package. llama.cpp/model install/start commands live in `docs/` as instructions for the user (Task 4).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/test_vision.py`:
 
@@ -394,12 +394,12 @@ def test_cli_parses_health():
     assert args.health is True
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv/bin/python -m pytest tests/test_vision.py -v`
 Expected: FAIL — `_detect_platform`, `_check_llama_server` not defined; `_parse_args` has no `--health`.
 
-- [ ] **Step 3: Implement platform detection + health check**
+- [x] **Step 3: Implement platform detection + health check**
 
 In `server.py`, after `_is_wsl()`:
 
@@ -467,12 +467,12 @@ Handle `--health` in `main()` before any server construction (after `--once`):
         return
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `.venv/bin/python -m pytest tests/test_vision.py -v`
 Expected: ALL PASS (11 original + 4 new from Task 1 + 4 new here).
 
-- [ ] **Step 5: Verify `--health` CLI behavior**
+- [x] **Step 5: Verify `--health` CLI behavior**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -481,7 +481,7 @@ cd /home/kadalz/dev/mata-kadalz
 
 Expected: JSON with platform/os/arch/wsl, resolved `llama_server_url`, health dict; exit 0 if a llama-server is up at that URL, 1 otherwise. (On CI/clean machine: `reachable: false` + exit 1 is a valid result, not a failure.)
 
-- [ ] **Step 6: Write `scripts/install.sh` (package install only)**
+- [x] **Step 6: Write `scripts/install.sh` (package install only)**
 
 ```bash
 #!/usr/bin/env bash
@@ -510,7 +510,7 @@ echo "Run http:                         .venv/bin/mata-kadalz --transport http -
 echo "Self-check: echo '{\"image_path\":\"<img>\",\"task\":\"<task>\"}' | .venv/bin/mata-kadalz --once"
 ```
 
-- [ ] **Step 7: Verify install.sh is idempotent + installs nothing external**
+- [x] **Step 7: Verify install.sh is idempotent + installs nothing external**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -520,7 +520,7 @@ bash scripts/install.sh
 
 Expected: re-install works; `--help` prints help; no llama.cpp/model files appear anywhere in the repo (verify: `find . -name "*.gguf" -o -name "llama-server*" | grep -v .venv` → empty).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -542,7 +542,7 @@ git commit -m "feat: platform detection + llama-server health check; package-onl
 - Consumes: all Tasks 1–3
 - Produces: complete public docs; no code impact
 
-- [ ] **Step 1: Write README.md**
+- [x] **Step 1: Write README.md**
 
 Cover: one-liner ("Lizard Eyes — local vision MCP server backed by Qwen3-VL-4B"), architecture diagram (generic, not WSL-specific), supported host setups table, quick start per OS (link to docs/), client registration for all 3 clients × both transports, one-tool usage, config table (unchanged precedence), caching, self-check, tests, license.
 
@@ -597,7 +597,7 @@ opencode stdio:
 
 (Continue with architecture, model, layout, usage, config table, caching, self-check, test, license — mirror the private README but generic paths.)
 
-- [ ] **Step 2: Write the 5 setup docs**
+- [x] **Step 2: Write the 5 setup docs**
 
 Each `docs/SETUP-<host>.md` follows the same template. **llama.cpp and the model are installed by the USER from official sources; the docs link out, never redistribute or auto-download.** The MCP's own `install.sh` only installs the `mata-kadalz` package.
 
@@ -654,7 +654,7 @@ Specifics per doc:
 - `SETUP-hybrid-wsl.md`: llama-server on the Windows host (user installs per `SETUP-windows.md`), MCP server in WSL (`install.sh`); auto gateway detection means `LLAMA_SERVER_URL` usually needs no override; verify with `--health`.
 - `SETUP-modular.md`: llama-server on any host reachable over LAN/remote; set `LLAMA_SERVER_URL=http://<host>:<port>` in `config/config.json` or env before starting the MCP server; firewall note; `--health` to verify.
 
-- [ ] **Step 3: Rewrite AGENTS.md** (generalized — drop WSL-specific golden rules, keep frozen model/tool/cache contracts):
+- [x] **Step 3: Rewrite AGENTS.md** (generalized — drop WSL-specific golden rules, keep frozen model/tool/cache contracts):
 
 ```markdown
 # AGENTS.md
@@ -708,7 +708,7 @@ echo '{"image_path":"/x.png","task":"t"}' | .venv/bin/mata-kadalz --once
 - `docs/adr/` — architecture decisions.
 ```
 
-- [ ] **Step 4: Fill CONTEXT.md glossary** (domain terms):
+- [x] **Step 4: Fill CONTEXT.md glossary** (domain terms):
 
 ```markdown
 ## MCP server
@@ -726,7 +726,7 @@ structured JSON. Never returns image bytes.
 The machine running llama-server. WSL auto-detects the Windows host gateway IP.
 ```
 
-- [ ] **Step 5: Verify docs render / no broken links**
+- [x] **Step 5: Verify docs render / no broken links**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -735,7 +735,7 @@ ls docs/*.md && grep -c "SETUP-" README.md
 
 Expected: 5 setup docs exist, README references all 5.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -756,7 +756,7 @@ git commit -m "docs: per-host setup guides, generalized README/AGENTS, glossary"
 - Consumes: `pyproject.toml` (uv sync), ruleset `protect-main` (context `ci`)
 - Produces: CI green gate on main, dependabot PRs, issue labels, first release
 
-- [ ] **Step 1: Replace CI workflow**
+- [x] **Step 1: Replace CI workflow**
 
 `.github/workflows/ci.yml`:
 
@@ -784,7 +784,7 @@ jobs:
 
 **Important:** the job must be named `ci` so its check context matches the `protect-main` ruleset's required status check.
 
-- [ ] **Step 2: Update dependabot**
+- [x] **Step 2: Update dependabot**
 
 `.github/dependabot.yml`:
 
@@ -801,7 +801,7 @@ updates:
       interval: "weekly"
 ```
 
-- [ ] **Step 3: Push main so CI runs + ruleset check appears**
+- [x] **Step 3: Push main so CI runs + ruleset check appears**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -810,7 +810,7 @@ git push -u origin main
 
 Expected: push succeeds; GitHub Actions run `ci`; check context `ci` appears on main.
 
-- [ ] **Step 4: Watch CI until green**
+- [x] **Step 4: Watch CI until green**
 
 ```bash
 gh run list -R kadalzbaiq/mata-kadalz --workflow ci --limit 1
@@ -819,7 +819,7 @@ gh run watch -R kadalzbaiq/mata-kadalz <run-id>
 
 Expected: CI passes (pytest green in clean uv env).
 
-- [ ] **Step 5: Create release-1 milestone + tracking issues**
+- [x] **Step 5: Create release-1 milestone + tracking issues**
 
 ```bash
 gh issue create -R kadalzbaiq/mata-kadalz --title "Validate Windows-native setup" --body "Run SETUP-windows.md end-to-end on a clean Windows machine." --label enhancement
@@ -827,7 +827,7 @@ gh issue create -R kadalzbaiq/mata-kadalz --title "Validate Linux-native setup" 
 gh issue create -R kadalzbaiq/mata-kadalz --title "Validate macOS setup" --body "Run SETUP-macos.md end-to-end on a clean Mac." --label enhancement
 ```
 
-- [ ] **Step 6: Create Projects v2 board + add issues**
+- [x] **Step 6: Create Projects v2 board + add issues**
 
 ```bash
 gh project create --owner kadalzbaiq --title "mata-kadalz"
@@ -839,7 +839,7 @@ gh project item-add <N> --owner kadalzbaiq --url <issue3-url>
 
 Expected: board exists with 3 items.
 
-- [ ] **Step 7: Create first release (v1.0.0)**
+- [x] **Step 7: Create first release (v1.0.0)**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -849,7 +849,7 @@ gh release create v1.0.0 --title "mata-kadalz v1.0.0" --generate-notes -R kadalz
 
 Expected: release page with auto-generated notes.
 
-- [ ] **Step 8: Enable Advanced Security (web UI, manual, once)**
+- [x] **Step 8: Enable Advanced Security (web UI, manual, once)**
 
 Open `https://github.com/kadalzbaiq/mata-kadalz/settings/security_analysis` →
 CodeQL default setup ON, secret scanning push protection ON.
@@ -867,7 +867,7 @@ CodeQL default setup ON, secret scanning push protection ON.
 - Consumes: everything
 - Produces: shippable main
 
-- [ ] **Step 1: Full local verification**
+- [x] **Step 1: Full local verification**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -881,7 +881,7 @@ echo '{"image_path":"/tmp/red.png","task":"what color?"}' | .venv/bin/mata-kadal
 
 Run same `--once` command twice; second run must show `"cache_hit":true`.
 
-- [ ] **Step 3: Verify LICENSE**
+- [x] **Step 3: Verify LICENSE**
 
 ```bash
 cd /home/kadalz/dev/mata-kadalz
@@ -897,7 +897,7 @@ git commit -m "chore: release polish"
 git push
 ```
 
-- [ ] **Step 5: Post-push confirmation**
+- [x] **Step 5: Post-push confirmation**
 
 ```bash
 gh run list -R kadalzbaiq/mata-kadalz --limit 3
