@@ -33,11 +33,15 @@ coverage/
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 .venv/
 venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Runtime (server writes cache/logs here)
+runtime/
 
 # Go
 bin/

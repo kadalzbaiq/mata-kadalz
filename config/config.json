@@ -1,0 +1,9 @@
+{
+  "LLAMA_SERVER_URL": "",
+  "VISION_RUNTIME_DIR": "runtime/vision",
+  "VISION_CACHE_DIR": "runtime/vision/cache",
+  "VISION_LOG_DIR": "runtime/vision/logs",
+  "VISION_TIMEOUT_SECONDS": "180",
+  "VISION_MAX_IMAGE_SIZE": "20971520",
+  "VISION_MODEL_ID": "qwen3-vl"
+}

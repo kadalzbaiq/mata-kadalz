@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vision-mcp"
+version = "1.0.0"
+description = "Local vision MCP server for opencode, backed by Qwen3-VL-4B on a Windows llama-server"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "mcp==2.0.0",
+]
+
+[tool.setuptools]
+py-modules = ["server"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
