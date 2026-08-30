@@ -9,7 +9,7 @@ description = "Lizard Eyes: local vision MCP server (Qwen3-VL via llama-server).
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
-    "mcp==2.0.0",
+    "mcp==2.1.1",
 ]
 
 [project.optional-dependencies]
